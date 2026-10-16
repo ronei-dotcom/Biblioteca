@@ -1,5 +1,5 @@
 // Service worker: deixa o app abrir sem internet.
-const VERSION = 'folio-v1';
+const VERSION = 'folio-v2';
 const CDN = [
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
@@ -40,9 +40,9 @@ self.addEventListener('fetch', e => {
     return;
   }
   // arquivos do app: tenta a rede e cai no cache se estiver offline
-  e.respondWith(fetch(req).then(res => {
-    const copy = res.clone();
-    caches.open(VERSION).then(c => c.put(req, copy));
+  // 'no-cache' faz o navegador conferir se há versão nova (senão o GitHub Pages pode segurar a antiga por ~10 min)
+  e.respondWith(fetch(req, { cache: 'no-cache' }).then(res => {
+    if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
     return res;
   }).catch(() => caches.match(req).then(hit => hit || caches.match('index.html'))));
 });
