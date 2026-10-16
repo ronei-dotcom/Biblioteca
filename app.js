@@ -532,7 +532,7 @@ function viewHome(v) {
       <button class="ib" data-act="settings" aria-label="Ajustes">${ic('gear', 20)}</button></div>
     ${!sb ? `<div class="warn">${ic('help', 20)}<div><b>Sincronização desligada.</b> Preencha o config.js para ver os mesmos livros no celular e no tablet.</div></div>` : ''}
     <div class="hello"><div class="eyebrow">${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</div><h1>${greeting()}</h1></div>
-    <div class="card"><div class="week">${wk}</div>
+    <div class="card"><button class="week" data-act="reports" aria-label="Abrir relatórios">${wk}</button>
     <div class="goal">
       <svg viewBox="0 0 300 160" width="100%"><path class="arc-bg" d="M30 150A120 120 0 0 1 270 150" fill="none" stroke-width="16" stroke-linecap="round"/>
         <path class="arc-fg" d="M30 150A120 120 0 0 1 270 150" pathLength="100" fill="none" stroke-width="16" stroke-linecap="round" stroke-dasharray="${(p * 100).toFixed(2)} 100" opacity="${p > 0 ? 1 : 0}"/></svg>
@@ -589,6 +589,68 @@ function marksView() {
     out += items.map(h => markItem(h)).join('');
   }
   return out;
+}
+
+
+/* ---------- Relatórios (abre ao tocar nos dias da semana) ---------- */
+const RP = { range: 'week', cal: new Date() };
+const MES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+function openReports() {
+  const st = stats(), now = new Date(), byPg = {};
+  for (const s of S.sessions) { const k = dk(s.started_at); byPg[k] = (byPg[k] || 0) + (s.pages_read || 0); }
+  // período e barras do gráfico
+  let days = [], bars = [];
+  if (RP.range === 'year') {
+    for (let m = 0; m < 12; m++) {
+      const dim = new Date(now.getFullYear(), m + 1, 0).getDate();
+      let sec = 0;
+      for (let d = 1; d <= dim; d++) { const dt = new Date(now.getFullYear(), m, d); days.push(dt); sec += st.byDay[dk(dt)] || 0; }
+      bars.push({ v: sec, l: MES[m][0] });
+    }
+  } else {
+    const n = RP.range === 'week' ? 7 : now.getDate();
+    for (let i = n - 1; i >= 0; i--) { const d = new Date(now); d.setDate(now.getDate() - i); days.push(d); }
+    bars = days.map((d, i) => ({ v: st.byDay[dk(d)] || 0, l: RP.range === 'week' ? WD[(d.getDay() + 6) % 7] : (i % 5 === 0 || i === n - 1 ? d.getDate() : '') }));
+  }
+  let act = 0, secs = 0, pg = 0;
+  for (const d of days) { const k = dk(d), v = st.byDay[k] || 0; if (v >= 60) act++; secs += v; pg += byPg[k] || 0; }
+  // eixo em horas (ou minutos, se for pouco)
+  const mx = Math.max(...bars.map(b => b.v), 1), useH = mx >= 3600;
+  const unit = useH ? 3600 : 60, top = Math.max(useH ? 1 : 10, Math.ceil(mx / unit / (useH ? 1 : 10)) * (useH ? 1 : 10));
+  const W = 340, H = 170, L = 34, bw = (W - L) / bars.length;
+  let grid = '';
+  for (let i = 0; i <= 5; i++) {
+    const y = 6 + (H - 6) * (1 - i / 5), val = top * i / 5;
+    grid += `<line x1="${L}" x2="${W}" y1="${y}" y2="${y}" class="rp-grid"/><text x="${L - 6}" y="${y + 4}" text-anchor="end" class="c-lab" font-size="10">${(useH ? val.toFixed(1).replace('.', ',').replace(',0', '') + 'h' : Math.round(val) + 'm')}</text>`;
+  }
+  const rects = bars.map((b, i) => {
+    const h = b.v / unit / top * (H - 6), x = L + i * bw;
+    return `<rect class="c-bar ${RP.range !== 'year' && b.v >= S.goal * 60 ? 'hit' : ''}" x="${x + bw * .2}" y="${H - h}" width="${bw * .6}" height="${Math.max(h, b.v ? 2 : 0)}" rx="${Math.min(4, bw * .25)}"/>
+      <text class="c-lab" x="${x + bw / 2}" y="${H + 16}" text-anchor="middle" font-size="10.5">${b.l}</text>`;
+  }).join('');
+  // calendário do mês
+  const cy = RP.cal.getFullYear(), cm = RP.cal.getMonth(), first = new Date(cy, cm, 1).getDay(), dim = new Date(cy, cm + 1, 0).getDate();
+  let cells = '<span></span>'.repeat(first);
+  for (let d = 1; d <= dim; d++) {
+    const k = dk(new Date(cy, cm, d)), v = st.byDay[k] || 0;
+    const cls = v >= S.goal * 60 ? 'goal' : v >= 60 ? 'read' : '';
+    cells += `<span class="${cls} ${k === dk(now) ? 'today' : ''}">${d}</span>`;
+  }
+  const title = RP.cal.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).replace(' de ', ' ');
+  const kpi = (i, v, l) => `<div class="rp-k"><div class="rp-i">${ic(i, 22)}</div><b>${v}</b><span>${l}</span></div>`;
+  const html = `<div class="bar-top"><div style="display:flex;align-items:center;gap:12px"><button class="ib" data-act="closeOv" aria-label="Voltar">${ic('prev', 20)}</button><h2>Relatórios</h2></div></div>
+    <div class="seg">${[['week', 'Semana'], ['month', 'Mês'], ['year', 'Ano']].map(([k, n]) => `<button class="${RP.range === k ? 'on' : ''}" data-act="rpRange" data-v="${k}">${n}</button>`).join('')}</div>
+    <div class="rp">
+      <div><div class="rp-kpis">${kpi('calendar', act, act === 1 ? 'Dia ativo' : 'Dias ativos')}${kpi('clock', fmtDur(secs), 'Tempo de leitura')}${kpi('book', pg.toLocaleString('pt-BR'), 'Páginas lidas')}</div>
+        <div class="chart"><svg viewBox="0 0 ${W} ${H + 24}" width="100%">${grid}${rects}</svg></div></div>
+      <div class="card rp-cal"><div class="rp-ch"><h2>${title[0].toUpperCase() + title.slice(1)}</h2>
+          <div style="display:flex;gap:6px"><button class="ib" data-act="rpCal" data-v="-1" aria-label="Mês anterior">${ic('prev', 18)}</button><button class="ib" data-act="rpCal" data-v="1" aria-label="Próximo mês">${ic('next', 18)}</button></div></div>
+        <div class="rp-grid7 rp-wd">${['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(x => `<span>${x}</span>`).join('')}</div>
+        <div class="rp-grid7 rp-days">${cells}</div>
+        <div class="rp-leg"><span><i class="goal"></i>Meta batida</span><span><i class="read"></i>Leu, sem meta</span><span><i class="today"></i>Hoje</span></div></div>
+    </div>`;
+  let o = $('#repOv');
+  if (o) { o.firstElementChild.innerHTML = html; } else { o = overlay(html); o.id = 'repOv'; }
 }
 
 /* ---------- Estatísticas ---------- */
@@ -1374,6 +1436,9 @@ const ACT = {
   ptab: t => { S.ptab = t.dataset.v; render(); },
   achInfo: (t, id) => achInfo(id),
   range: t => { S.range = +t.dataset.v; render(); },
+  reports: () => { RP.cal = new Date(); RP.cal.setDate(1); openReports(); },
+  rpRange: t => { RP.range = t.dataset.v; openReports(); },
+  rpCal: t => { RP.cal.setMonth(RP.cal.getMonth() + +t.dataset.v); openReports(); },
   settings: () => openSettings(),
   theme: t => { localStorage.setItem('theme', t.dataset.v); applyTheme(); openSettings(); render(); },
   add: () => openForm(),
