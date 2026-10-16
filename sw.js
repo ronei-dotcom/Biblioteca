@@ -1,11 +1,11 @@
 // Service worker: deixa o app abrir sem internet.
-const VERSION = 'folio-v2';
+const VERSION = 'folio-v3';
 const CDN = [
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
-  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js'
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.js'
 ];
-const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const SHELL = ['./', 'index.html', 'style.css?v=3', 'app.js?v=3', 'config.js?v=3', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
@@ -39,8 +39,7 @@ self.addEventListener('fetch', e => {
     })));
     return;
   }
-  // arquivos do app: tenta a rede e cai no cache se estiver offline
-  // 'no-cache' faz o navegador conferir se há versão nova (senão o GitHub Pages pode segurar a antiga por ~10 min)
+  // arquivos do app: sempre tenta a rede (versão nova) e cai no cache se estiver offline
   e.respondWith(fetch(req, { cache: 'no-cache' }).then(res => {
     if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
     return res;
