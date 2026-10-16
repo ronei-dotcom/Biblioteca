@@ -634,7 +634,7 @@ function openReports() {
   for (let d = 1; d <= dim; d++) {
     const k = dk(new Date(cy, cm, d)), v = st.byDay[k] || 0;
     const cls = v >= S.goal * 60 ? 'goal' : v >= 60 ? 'read' : '';
-    cells += `<span class="${cls} ${k === dk(now) ? 'today' : ''}">${d}</span>`;
+    cells += `<button class="${cls} ${k === dk(now) ? 'today' : ''}" data-act="rpDay" data-v="${k}">${d}</button>`;
   }
   const title = RP.cal.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).replace(' de ', ' ');
   const kpi = (i, v, l) => `<div class="rp-k"><div class="rp-i">${ic(i, 22)}</div><b>${v}</b><span>${l}</span></div>`;
@@ -651,6 +651,30 @@ function openReports() {
     </div>`;
   let o = $('#repOv');
   if (o) { o.firstElementChild.innerHTML = html; } else { o = overlay(html); o.id = 'repOv'; }
+}
+
+
+/* detalhe de um dia (toque no calendário) */
+function dayDetail(k) {
+  const ses = S.sessions.filter(s => dk(s.started_at) === k).sort((a, b) => a.started_at.localeCompare(b.started_at));
+  const marks = S.hl.filter(h => dk(h.created_at) === k);
+  const fin = S.books.filter(b => b.status === 'finished' && b.finished_at && dk(b.finished_at) === k);
+  const secs = ses.reduce((x, s) => x + (s.duration_sec || 0), 0), pg = ses.reduce((x, s) => x + (s.pages_read || 0), 0);
+  const goal = S.goal * 60, p = Math.min(1, secs / goal);
+  const d = new Date(k + 'T12:00:00'), title = d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const verdict = !secs ? (k > dk(new Date()) ? 'Esse dia ainda não chegou.' : 'Nenhuma leitura neste dia.')
+    : p >= 1 ? `Meta batida! ${secs >= goal * 2 ? 'Mais que o dobro da meta.' : ''}` : `Faltaram ${Math.ceil((goal - secs) / 60)} min para a meta.`;
+  const m = modal(`<div class="eyebrow">${title}</div><h3 style="margin-top:4px">${secs ? fmtDur(secs) + ' de leitura' : 'Dia sem leitura'}</h3>
+    <p class="mut" style="margin:2px 0 0">${verdict}</p>
+    <div class="bar" style="height:7px;margin-top:12px"><i style="width:${Math.round(p * 100)}%"></i></div>
+    <div class="kpis"><div class="kpi"><b>${fmtDur(secs)}</b><span>Tempo (meta ${S.goal} min)</span></div><div class="kpi"><b>${pg}</b><span>Páginas lidas</span></div>
+      <div class="kpi"><b>${ses.length}</b><span>${ses.length === 1 ? 'Sessão' : 'Sessões'}</span></div><div class="kpi"><b>${secs > 60 ? Math.round(pg / (secs / 3600)) : '–'}</b><span>Páginas por hora</span></div></div>
+    ${fin.length ? `<div class="lab">Livro terminado</div>${fin.map(b => `<div class="dd-row">${ic('trophy', 20)}<div><b>${esc(b.title)}</b>${b.rating ? `<small style="color:var(--gold)">${'★'.repeat(b.rating)}</small>` : ''}</div></div>`).join('')}` : ''}
+    ${ses.length ? `<div class="lab">Sessões</div>${ses.map(s => { const b = bookById(s.book_id); return `<div class="dd-row">${ic('clock', 20)}<div style="flex:1;min-width:0"><b>${esc(b ? b.title : 'Livro removido')}</b>
+      <small>${new Date(s.started_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · ${fmtDur(s.duration_sec || 0)} · ${s.pages_read || 0} pág.${s.end_page ? ` · parou na p. ${s.end_page}` : ''}</small></div></div>`; }).join('')}` : ''}
+    ${marks.length ? `<div class="lab">Trechos marcados · ${marks.length}</div>${marks.slice(0, 6).map(h => markItem(h)).join('')}` : ''}
+    <button class="btn sec2" style="margin-top:18px" onclick="this.closest('.md').remove()">Fechar</button>`);
+  m.addEventListener('click', e => { if (e.target.closest('.mark')) m.remove(); });
 }
 
 /* ---------- Estatísticas ---------- */
@@ -1438,6 +1462,7 @@ const ACT = {
   range: t => { S.range = +t.dataset.v; render(); },
   reports: () => { RP.cal = new Date(); RP.cal.setDate(1); openReports(); },
   rpRange: t => { RP.range = t.dataset.v; openReports(); },
+  rpDay: t => dayDetail(t.dataset.v),
   rpCal: t => { RP.cal.setMonth(RP.cal.getMonth() + +t.dataset.v); openReports(); },
   settings: () => openSettings(),
   theme: t => { localStorage.setItem('theme', t.dataset.v); applyTheme(); openSettings(); render(); },
